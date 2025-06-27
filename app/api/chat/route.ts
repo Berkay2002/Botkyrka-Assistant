@@ -350,107 +350,133 @@ export async function POST(req: Request) {
     const intentAnalysis = detectIntent(latestMessage)
     console.log('Intent detected:', intentAnalysis.intent)
     
-    // Enhanced multilingual processing
-    console.log('🌐 Starting enhanced multilingual processing...')
+    // Enhanced multilingual processing with comprehensive search and scraping
+    console.log('🌐 Starting comprehensive multilingual processing...')
     let enhancedSearchResults: any[] = []
     let multilingualEnhancement = ""
+    let detectedLanguage = { languageCode: 'sv', language: 'Swedish' }
     
     try {
-      // Step 1: Detect user language
-      const languageDetection = await detectUserLanguage(latestMessage)
-      console.log('Language detected:', languageDetection)
+      // Step 1: Always detect user language for proper response formatting
+      detectedLanguage = await detectUserLanguage(latestMessage)
+      console.log('Language detected:', detectedLanguage)
       
-      // Step 2: Check if we need translation for better search results
-      const municipalitySupportedLanguages = ['sv']
-      const needsTranslation = languageDetection.languageCode !== 'sv'
+      // Step 2: Always translate to Swedish for optimal municipality search (regardless of input language)
+      console.log('🔄 Preparing Swedish keywords for optimal search results...')
       
-      if (needsTranslation) {
-        console.log('🔄 Translating query to Swedish for optimal search results...')
+      // Step 3: Extract search keywords in Swedish using intent translation
+      const intentTranslation = await detectIntentAndTranslate(
+        latestMessage,
+        detectedLanguage.languageCode,
+        'sv'
+      )
+      console.log('Intent and Swedish translation:', intentTranslation)
+      
+      // Step 4: Search Botkyrka municipality with Swedish keywords  
+      console.log(`🔍 Searching Botkyrka with optimized keywords: "${intentTranslation.translatedQuery}"`)
+      const searchResults = await fetchBotkyrkaSearchResults(intentTranslation.translatedQuery)
+      
+      if (searchResults.success && searchResults.results.length > 0) {
+        // Step 5: Rank results by relevance to the query
+        enhancedSearchResults = rankResultsByRelevance(searchResults.results, intentTranslation.translatedQuery)
+        console.log(`✅ Found and ranked ${enhancedSearchResults.length} results`)
         
-        // Step 3: Extract search keywords in Swedish
-        const intentTranslation = await detectIntentAndTranslate(
-          latestMessage,
-          languageDetection.languageCode,
-          'sv'
-        )
+        // Step 6: Scrape content from the most relevant pages for comprehensive information
+        let scrapedContent = ""
+        let structuredContactInfo = ""
         
-        // Step 4: Search with extracted keywords (ALWAYS search with Swedish keywords)
-        console.log(`🔍 Searching with Swedish keywords: "${intentTranslation.translatedQuery}"`)
-        const searchResults = await fetchBotkyrkaSearchResults(intentTranslation.translatedQuery)
+        // Scrape content from top-ranked results (up to 2 pages for comprehensive coverage)
+        const pagesToScrape = enhancedSearchResults.slice(0, 2).filter(result => 
+          result.relevanceScore && result.relevanceScore > 5
+        );
         
-        if (searchResults.success && searchResults.results.length > 0) {
-          enhancedSearchResults = rankResultsByRelevance(searchResults.results, intentTranslation.translatedQuery)
-          console.log(`✅ Found ${enhancedSearchResults.length} enhanced results`)
+        if (pagesToScrape.length > 0) {
+          console.log(`📄 Scraping content from ${pagesToScrape.length} top-ranked pages...`)
           
-          // Step 5: Scrape content from the TOP result to get current information
-          let actualPageContent = ""
-          let structuredContactInfo = ""
-          if (enhancedSearchResults.length > 0) {
-            const topResult = enhancedSearchResults[0]
-            console.log(`📄 Scraping content from top result: ${topResult.link}`)
-            
+          for (const [index, result] of pagesToScrape.entries()) {
             try {
               const { scrapePageContent } = await import('@/lib/botkyrka-scraper')
-              const scrapedData = await scrapePageContent(topResult.link)
+              const scrapedData = await scrapePageContent(result.link)
               
               if (scrapedData.success && scrapedData.content) {
-                actualPageContent = scrapedData.content
-                console.log(`✅ Scraped ${actualPageContent.length} characters from page`)
+                scrapedContent += `\n\n--- CONTENT FROM ${result.link} ---\n${scrapedData.content}`
+                console.log(`✅ Scraped ${scrapedData.content.length} characters from page ${index + 1}`)
                 
-                // Use structured contact information if available
+                // Collect structured contact information
                 if (scrapedData.structuredInfo && scrapedData.structuredInfo.contacts.length > 0) {
-                  structuredContactInfo = "\n**OFFICIAL CONTACT INFORMATION (from Kontakt section):**\n"
+                  if (!structuredContactInfo) {
+                    structuredContactInfo = "\n**OFFICIAL CONTACT INFORMATION:**\n"
+                  }
                   scrapedData.structuredInfo.contacts.forEach(contact => {
                     structuredContactInfo += `• ${contact.role}: ${contact.name}`
                     if (contact.email) structuredContactInfo += ` (${contact.email})`
                     if (contact.phone) structuredContactInfo += ` - ${contact.phone}`
                     structuredContactInfo += "\n"
                   })
-                  console.log(`📞 Found structured contact info: ${scrapedData.structuredInfo.contacts.length} contacts`)
                 }
               }
             } catch (scrapeError) {
-              console.error('Error scraping page content:', scrapeError)
+              console.error(`Error scraping page ${result.link}:`, scrapeError)
             }
           }
-          
-          // Add to context for Gemini
-          multilingualEnhancement = `
-          
-**COMPLETE PAGE CONTENT FROM BOTKYRKA WEBSITE** (query: "${intentTranslation.translatedQuery}"):
+        }
+        
+        // Step 7: Build comprehensive context for AI response
+        multilingualEnhancement = `
 
-${actualPageContent ? `**FULL SCRAPED CONTENT FROM: ${enhancedSearchResults[0].link}**
-${actualPageContent}
+**COMPREHENSIVE MUNICIPALITY SEARCH RESULTS** (Search: "${intentTranslation.translatedQuery}"):
+
+${scrapedContent ? `**COMPLETE SCRAPED CONTENT FROM BOTKYRKA WEBSITE:**
+${scrapedContent}
 
 ${structuredContactInfo}
 
-CRITICAL INSTRUCTIONS FOR CONTACT INFORMATION:
-- Search through ALL the content above to find staff names and contact details
-- Look for patterns like "Rektor: [Name]", "Rektor [Name]", or similar role indicators
-- Check for contact sections, staff listings, or organizational information
-- Do NOT say information is unavailable if you can find names or roles in the content above
-- Extract names, email addresses, and phone numbers when present
-- If you find staff information, present it clearly with roles and contact details
+CRITICAL INSTRUCTIONS FOR USING THIS CONTENT:
+- You have COMPLETE, UP-TO-DATE content from Botkyrka's official website above
+- Search through ALL content to find specific names, roles, contact details, and information
+- For staff queries (like "rektor", "principal", etc.): Look for patterns like "Rektor: [Name]", "[Name], rektor", or staff listings
+- Extract exact names, email addresses, phone numbers, and roles when present
+- Use the official contact information and current details from the scraped content
+- Do NOT claim information is unavailable if it exists in the content above
+- Present findings clearly with proper formatting and contact details
+- Include relevant links from the search results below` : 'Content scraping was not successful - using search results only.'}
 
-** IMPORTANT **: You have the COMPLETE page content above. Do not claim information is missing unless you have thoroughly searched through all the provided content.` : 'No page content could be scraped.'}
-
-**SEARCH RESULTS FOR REFERENCE:**
-${enhancedSearchResults.slice(0, 3).map((result, index) => 
-  `${index + 1}. ${result.title}
+**RANKED SEARCH RESULTS FOR REFERENCE:**
+${enhancedSearchResults.slice(0, 5).map((result, index) => 
+  `${index + 1}. **${result.title}** (Score: ${result.relevanceScore || 0}/20)
      ${result.description}
-     Link: ${result.link}
-     Relevance: ${result.relevanceScore || 0}/20`
+     Link: ${result.link}`
 ).join('\n\n')}
 
-User's original language: ${languageDetection.language} (${languageDetection.languageCode})
-Respond in the SAME language as the user's question.`
-        } else {
-          console.log(`❌ No results found for translated query: "${intentTranslation.translatedQuery}"`)
+**RESPONSE INSTRUCTIONS:**
+- User's original language: ${detectedLanguage.language} (${detectedLanguage.languageCode})  
+- Respond in the SAME language as the user's question
+- Use the comprehensive content above to provide detailed, accurate answers
+- Include relevant links from the search results
+- Focus on official, current information from the municipality website`
+
+        console.log(`📊 Comprehensive processing completed: ${enhancedSearchResults.length} results, ${scrapedContent.length} characters scraped`)
+        
+      } else {
+        console.log(`❌ No results found for query: "${intentTranslation.translatedQuery}"`)
+        
+        // Provide helpful message in user's language when no results found
+        const noResultsMessages = {
+          'sv': 'Jag kunde inte hitta specifik information om det du frågade efter. Försök med andra sökord eller kontakta Botkyrka kommun direkt på botkyrka.se',
+          'en': 'I couldn\'t find specific information about what you asked for. Try different search terms or contact Botkyrka municipality directly at botkyrka.se',
+          'so': 'Ma heli karo macluumaad ku saabsan waxa aad waydiisay. Tijaabi erayo kale ama la xiriir degmada Botkyrka si toos ah botkyrka.se',
+          'ar': 'لم أتمكن من العثور على معلomات محددة حول ما سألت عنه. جرب كلمات بحث مختلفة أو اتصل ببلدية بوتشيركا مباشرة على botkyrka.se',
+          'tr': 'Sorduğunuz hakkında özel bilgi bulamadım. Farklı arama terimleri deneyin veya Botkyrka belediyesine doğrudan botkyrka.se adresinden ulaşın',
+          'fi': 'En löytänyt erityisiä tietoja siitä, mitä kysyit. Kokeile erilaisia hakusanoja tai ota yhteyttä Botkyrkan kuntaan suoraan osoitteessa botkyrka.se'
         }
+        
+        multilingualEnhancement = `\n\nNo specific search results found. Suggest: ${noResultsMessages[detectedLanguage.languageCode as keyof typeof noResultsMessages] || noResultsMessages['sv']}`
       }
+      
     } catch (error) {
-      console.error('Error in multilingual enhancement:', error)
+      console.error('Error in comprehensive multilingual processing:', error)
       // Continue with standard flow if multilingual enhancement fails
+      multilingualEnhancement = `\n\nMultilingual processing encountered an error, but continuing with standard response flow.`
     }
     
     // Build intent-aware response enhancements
@@ -594,7 +620,7 @@ Respond in the SAME language as the user's question.`
     return new Response(JSON.stringify({ 
       content: cleanedResponse,
       type: "answer",
-      language: "sv", // We can add language detection later if needed
+      language: detectedLanguage.languageCode, // Dynamic language detection
       role: 'assistant',
       metadata: {
         scrapedContent: scrapedPageContent.length > 0,
@@ -603,6 +629,7 @@ Respond in the SAME language as the user's question.`
         confidence: intentAnalysis.intent.confidence,
         multilingualEnhanced: enhancedSearchResults.length > 0,
         enhancedResultsCount: enhancedSearchResults.length,
+        detectedLanguage: detectedLanguage,
         structured: true
       }
     }), {

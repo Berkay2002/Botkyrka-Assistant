@@ -6,17 +6,14 @@ import { ArrowUpIcon, ExternalLinkIcon, MessageSquareIcon, RefreshCwIcon } from 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AutoResizeTextarea } from "@/components/autoresize-textarea"
 import { LanguageSelector } from "@/components/language-selector"
 import { QuickActions } from "@/components/quick-actions"
-import { MessageFeedback } from "@/components/message-feedback"
 import { FallbackDialog } from "@/components/fallback-dialog"
 import { LinkPreview } from "@/components/link-preview"
 import { ClientOnly } from "@/components/client-only"
-import StructuredResponse from "@/components/structured-response"
 import { detectIntent } from "@/lib/intent-detection"
 import { useTranslation } from 'react-i18next'
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/lib/i18n'
@@ -338,16 +335,6 @@ export function ChatForm({ className, ...props }: React.ComponentProps<"form">) 
     setInput(value)
   }
 
-  const handleFeedback = (helpful: boolean, comment?: string) => {
-    // Feedback is already sent by MessageFeedback component
-    console.log('Feedback received:', { helpful, comment })
-  }
-
-  const handleSendToKommun = (questionText?: string) => {
-    setFallbackQuestion(questionText || input || 'General inquiry')
-    setShowFallback(true)
-  }
-
   const handleTryAnother = () => {
     setShowFallback(false)
     setFallbackQuestion('')
@@ -371,50 +358,8 @@ export function ChatForm({ className, ...props }: React.ComponentProps<"form">) 
     }, 100)
   }
 
-  const currentLanguage = SUPPORTED_LANGUAGES[i18n.language as LanguageCode] || SUPPORTED_LANGUAGES.sv
-
   // Show initial greeting if no messages
   const showGreeting = messages.length === 0
-
-  const header = (
-    <header className="flex flex-col items-center text-center px-4 py-6 max-w-md mx-auto">
-      <div className="flex items-center justify-between w-full mb-4">
-        <div></div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-blue-600">
-          <ClientOnly fallback="BotKyrka">
-            {t('title')}
-          </ClientOnly>
-        </h1>
-        <ClientOnly>
-          <LanguageSelector />
-        </ClientOnly>
-      </div>
-      
-      {/* Welcome message */}
-      <Card className="w-full max-w-[85%] mb-4">
-        <CardContent className="p-4">
-          <p className="text-gray-800 text-sm sm:text-base">
-            <ClientOnly fallback="Hej! Hur kan jag hjälpa dig idag?">
-              {t('greeting')}
-            </ClientOnly>
-          </p>
-        </CardContent>
-      </Card>
-      
-      {/* Context hint */}
-      <p className="text-gray-500 text-xs sm:text-sm mb-6 px-2">
-        <ClientOnly fallback="Fråga mig om vad som helst gällande Botkyrkas tjänster—t.ex. förskola, boende eller avfallshantering.">
-          {t('contextHint')}
-        </ClientOnly>
-      </p>
-      
-      <div className="w-full">
-        <ClientOnly>
-          <QuickActions onActionClick={handleQuickAction} />
-        </ClientOnly>
-      </div>
-    </header>
-  )
 
   const messageList = (
     <div className="flex-1 flex flex-col">
@@ -471,20 +416,6 @@ export function ChatForm({ className, ...props }: React.ComponentProps<"form">) 
                   <div className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">
                     {processMessageContent(message.content)}
                   </div>
-                  
-                  {message.role === 'assistant' && (
-                    <>
-                      <Separator className="my-3" />
-                      <ClientOnly>
-                        <MessageFeedback
-                          messageIndex={index}
-                          messageContent={message.content}
-                          onFeedback={handleFeedback}
-                          onSendToKommun={() => handleSendToKommun(message.content)}
-                        />
-                      </ClientOnly>
-                    </>
-                  )}
                 </CardContent>
               </Card>
             </div>
@@ -499,8 +430,8 @@ export function ChatForm({ className, ...props }: React.ComponentProps<"form">) 
                 <div className="flex items-center space-x-2">
                   <RefreshCwIcon className="h-4 w-4 animate-spin text-blue-500" />
                   <span className="text-sm text-gray-600">
-                    <ClientOnly fallback="Thinking...">
-                      {isScrapingContent ? t('scraping_content') : t('thinking')}
+                    <ClientOnly fallback="Analyzing your question...">
+                      {isScrapingContent ? t('scraping_content') : 'Analyzing your question... 🌍'}
                     </ClientOnly>
                   </span>
                 </div>
@@ -514,6 +445,11 @@ export function ChatForm({ className, ...props }: React.ComponentProps<"form">) 
                     </span>
                   </div>
                 )}
+                <div className="mt-2 text-xs text-gray-500">
+                  <ClientOnly fallback="Processing in multiple languages...">
+                    🔄 Detecting language and searching for relevant information...
+                  </ClientOnly>
+                </div>
                 <div className="mt-2 space-y-2">
                   <Skeleton className="h-3 w-full" />
                   <Skeleton className="h-3 w-3/4" />
@@ -557,7 +493,41 @@ export function ChatForm({ className, ...props }: React.ComponentProps<"form">) 
               </Card>
             </div>
           }>
-            {showGreeting ? header : messageList}
+            {showGreeting ? (
+              <div className="flex-1 flex flex-col">
+                {/* Always show navigation */}
+                <div className="bg-white/95 backdrop-blur-sm border-b border-gray-100 px-4 py-3">
+                  <div className="flex items-center justify-between max-w-4xl mx-auto">
+                    <div className="w-20"></div>
+                    <div className="flex-1 flex justify-center">
+                      <h1 className="text-lg sm:text-xl font-semibold text-blue-600">
+                        <ClientOnly fallback="BotKyrka">
+                          {t('title')}
+                        </ClientOnly>
+                      </h1>
+                    </div>
+                    <div className="w-20 flex justify-end">
+                      <ClientOnly>
+                        <LanguageSelector />
+                      </ClientOnly>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Greeting content */}
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center px-4 py-4 max-w-md mx-auto">
+                    <div className="w-full">
+                      <ClientOnly>
+                        <QuickActions onActionClick={handleQuickAction} />
+                      </ClientOnly>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              messageList
+            )}
           </ClientOnly>
         </div>
         
