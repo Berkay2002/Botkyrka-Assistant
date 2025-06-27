@@ -6,20 +6,25 @@ import type { ReactNode } from "react"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "OpenAI and AI SDK Chatbot",
-  description: "A simple chatbot built using the AI SDK and gpt-4o-mini.",
-    generator: 'v0.dev'
+  title: "Botkyrka Assist",
+  description: "Multilingual Q&A assistant for Botkyrka kommun - Get answers in Swedish, English, Somali, Arabic, Turkish and more",
+  generator: 'Botkyrka Kommune',
+}
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 }
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="sv">
       <body className={cn("flex min-h-svh flex-col antialiased", inter.className)}>
         <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
       </body>
     </html>
   )
 }
-
 
 import './globals.css'
